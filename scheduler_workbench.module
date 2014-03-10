@@ -160,14 +160,28 @@ function scheduler_workbench_node_update($node) {
   // only update database if we need to (un)publish this node at some date
   // otherwise the user probably cleared out the (un)publish dates so we should remove the record
   if (!empty($node->revision_publish_on)) {
-    db_merge('scheduler')
-      ->key(array('nid' => $node->nid))
-      ->fields(array(
-        'publish_on' => _scheduler_strtotime($node->revision_publish_on),
-        'unpublish_on' => $node->unpublish_on,
-      ))
-      ->execute();
+    drupal_register_shutdown_function('_scheduler_workbench_save_scheduler_record', array(
+      'nid' => $node->nid,
+      'publish_on' => _scheduler_strtotime($node->revision_publish_on),
+      'unpublish_on' => $node->unpublish_on,
+    ));
   }
+}
+
+/**
+ * Saves (inserts or updates) a record in the "scheduler" table.
+ *
+ * @param array $record
+ *   An associative array representing a "scheduler" table row.
+ */
+function _scheduler_workbench_save_scheduler_record($record) {
+  db_merge('scheduler')
+    ->key(array('nid' => $record['nid']))
+    ->fields(array(
+      'publish_on' => $record['publish_on'],
+      'unpublish_on' => $record['unpublish_on'],
+    ))
+    ->execute();
 }
 
 /**
@@ -191,6 +205,13 @@ function scheduler_workbench_module_implements_alter(&$implementations, $hook) {
 
     case 'node_presave':
       unset($implementations['scheduler']);
+      break;
+
+    case 'node_update':
+      // Should be executed after the workbench_moderation.
+      $group = $implementations['scheduler_workbench'];
+      unset($implementations['scheduler_workbench']);
+      $implementations['scheduler_workbench'] = $group;
   }
 }
 
